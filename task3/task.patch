@@ -1,0 +1,241 @@
+diff -rupN usrOld1/usr/include/minix/callnr.h usrDone1/usr/include/minix/callnr.h
+--- usrOld1/usr/include/minix/callnr.h	2018-05-02 21:55:10.451053191 +0200
++++ usrDone1/usr/include/minix/callnr.h	2018-05-02 22:00:11.935536484 +0200
+@@ -58,8 +58,9 @@
+ #define PM_GETEPINFO		(PM_BASE + 45)
+ #define PM_GETPROCNR		(PM_BASE + 46)
+ #define PM_GETSYSINFO		(PM_BASE + 47)
++#define PM_PSTREE		(PM_BASE + 48)
+ 
+-#define NR_PM_CALLS		48	/* highest number from base plus one */
++#define NR_PM_CALLS		49	/* highest number from base plus one */
+ 
+ /*===========================================================================*
+  *				Calls to VFS				     *
+diff -rupN usrOld1/usr/include/unistd.h usrDone1/usr/include/unistd.h
+--- usrOld1/usr/include/unistd.h	2018-05-02 21:55:10.699053222 +0200
++++ usrDone1/usr/include/unistd.h	2018-05-02 22:00:11.635530345 +0200
+@@ -411,5 +411,7 @@ extern	 int optreset;		/* getopt(3) exte
+ extern	 char *suboptarg;	/* getsubopt(3) external variable */
+ #endif
+ 
++int pstree(pid_t pid, int uid);
++
+ __END_DECLS
+ #endif /* !_UNISTD_H_ */
+diff -rupN usrOld1/usr/src/include/unistd.h usrDone1/usr/src/include/unistd.h
+--- usrOld1/usr/src/include/unistd.h	2018-05-01 15:49:43.264614000 +0200
++++ usrDone1/usr/src/include/unistd.h	2018-05-02 21:59:28.722596043 +0200
+@@ -411,5 +411,7 @@ extern	 int optreset;		/* getopt(3) exte
+ extern	 char *suboptarg;	/* getsubopt(3) external variable */
+ #endif
+ 
++int pstree(pid_t pid, int uid);
++
+ __END_DECLS
+ #endif /* !_UNISTD_H_ */
+
+diff -rupN usrOld1/usr/src/lib/libc/misc/Makefile.inc usrDone1/usr/src/lib/libc/misc/Makefile.inc
+--- usrOld1/usr/src/lib/libc/misc/Makefile.inc	2018-05-02 21:56:05.600010457 +0200
++++ usrDone1/usr/src/lib/libc/misc/Makefile.inc	2018-05-02 21:59:31.482659720 +0200
+@@ -4,7 +4,7 @@
+ .PATH: ${ARCHDIR}/misc ${.CURDIR}/misc
+ 
+ # constructor
+-SRCS+=	initfini.c
++SRCS+=	initfini.c pstree.c
+ 
+ # for -fstack-protector
+ SRCS+=	stack_protector.c
+diff -rupN usrOld1/usr/src/lib/libc/misc/pstree.c usrDone1/usr/src/lib/libc/misc/pstree.c
+--- usrOld1/usr/src/lib/libc/misc/pstree.c	1970-01-01 01:00:00.000000000 +0100
++++ usrDone1/usr/src/lib/libc/misc/pstree.c	2018-05-02 21:59:31.482659720 +0200
+@@ -0,0 +1,17 @@
++#include <lib.h>
++#include <stdio.h>
++#include <stdlib.h>
++#include <sys/types.h>
++#include <unistd.h>
++#include <minix/rs.h>
++
++int pstree(pid_t pid, int uid) {
++	message m;
++	m.m1_i1 = pid;
++	m.m1_i2 = uid;
++	m.m1_i3 = getgid();
++
++	return _syscall(PM_PROC_NR, PM_PSTREE, &m);
++}
++
++
+diff -rupN usrOld1/usr/src/minix/include/minix/callnr.h usrDone1/usr/src/minix/include/minix/callnr.h
+--- usrOld1/usr/src/minix/include/minix/callnr.h	2018-05-02 21:55:59.315727964 +0200
++++ usrDone1/usr/src/minix/include/minix/callnr.h	2018-05-02 21:59:35.790758085 +0200
+@@ -58,8 +58,9 @@
+ #define PM_GETEPINFO		(PM_BASE + 45)
+ #define PM_GETPROCNR		(PM_BASE + 46)
+ #define PM_GETSYSINFO		(PM_BASE + 47)
++#define PM_PSTREE		(PM_BASE + 48)
+ 
+-#define NR_PM_CALLS		48	/* highest number from base plus one */
++#define NR_PM_CALLS		49	/* highest number from base plus one */
+ 
+ /*===========================================================================*
+  *				Calls to VFS				     *
+diff -rupN usrOld1/usr/src/minix/servers/pm/Makefile usrDone1/usr/src/minix/servers/pm/Makefile
+--- usrOld1/usr/src/minix/servers/pm/Makefile	2018-05-02 21:56:01.239815106 +0200
++++ usrDone1/usr/src/minix/servers/pm/Makefile	2018-05-02 21:59:32.942693203 +0200
+@@ -4,7 +4,7 @@
+ PROG=	pm
+ SRCS=	main.c forkexit.c exec.c time.c alarm.c \
+ 	signal.c utility.c table.c trace.c getset.c misc.c \
+-	profile.c mcontext.c schedule.c
++	profile.c mcontext.c schedule.c pstree.c
+ 
+ DPADD+=	${LIBSYS} ${LIBTIMERS}
+ LDADD+=	-lsys -ltimers
+diff -rupN usrOld1/usr/src/minix/servers/pm/proto.h usrDone1/usr/src/minix/servers/pm/proto.h
+--- usrOld1/usr/src/minix/servers/pm/proto.h	2018-05-02 21:56:01.239815106 +0200
++++ usrDone1/usr/src/minix/servers/pm/proto.h	2018-05-02 21:59:32.946693294 +0200
+@@ -89,3 +89,5 @@ struct mproc *find_proc(pid_t lpid);
+ int nice_to_priority(int nice, unsigned *new_q);
+ int pm_isokendpt(int ep, int *proc);
+ void tell_vfs(struct mproc *rmp, message *m_ptr);
++
++int do_pstree(void);
+diff -rupN usrOld1/usr/src/minix/servers/pm/pstree.c usrDone1/usr/src/minix/servers/pm/pstree.c
+--- usrOld1/usr/src/minix/servers/pm/pstree.c	1970-01-01 01:00:00.000000000 +0100
++++ usrDone1/usr/src/minix/servers/pm/pstree.c	2018-05-02 21:59:32.958693569 +0200
+@@ -0,0 +1,120 @@
++#include <stdio.h>
++#include "pm.h"             
++#include "mproc.h" 
++
++struct process {
++    int pid;
++    int index;
++    int parent;
++};
++
++void quicksort(struct process processes[], int len) {
++    if (len < 2)
++        return;
++
++    int middle = processes[len / 2].pid;
++
++    int i, j;
++    for (i = 0, j = len - 1; ; i++, j--) {
++
++        while (processes[i].pid < middle)
++            i++;
++
++        while (processes[j].pid > middle)
++            j--;
++
++        if (i >= j)
++            break;
++
++        struct process temp = processes[i];
++        processes[i] = processes[j];
++        processes[j] = temp;
++    }
++
++    quicksort(processes, i);
++    quicksort(processes + i, len - i);
++}
++
++void printPid(int pid, int index, int level, int child[NR_PROCS][NR_PROCS], int childCount[NR_PROCS]) {
++    
++    for (int i = 0; i < level; i++) {
++        printf("---");
++    }
++    printf("%d\n", pid);
++
++    int which = 0;
++
++    for (int i = 0; i< childCount[index]; i++) {
++        int childIndex = child[index][i];
++        struct mproc proc = mproc[childIndex];
++        printPid(proc.mp_pid, childIndex, level + 1, child, childCount);
++    }
++
++}
++
++int do_pstree() {
++    int pid = m_in.m1_i1;
++    int userId = m_in.m1_i2;
++    int gid = m_in.m1_i3;
++
++    int found = 0;
++    int index = 0;
++
++    struct process processes[NR_PROCS];
++
++    for (int i = 0; i < NR_PROCS; i++) {
++        processes[i].pid = 0;
++        processes[i].index = 0;
++        processes[i].parent = 0;
++    }
++
++    int which = 0;
++
++    for (int i = 0; i < NR_PROCS; i++) {
++        struct mproc proc = mproc[i];
++
++        int in_use = 0;
++        if (proc.mp_flags & IN_USE) {
++            in_use = 1;
++        }
++        
++        if (in_use && proc.mp_realuid == userId && proc.mp_realgid == gid) {
++
++            processes[which].pid = proc.mp_pid;
++            processes[which].index = i;
++            processes[which].parent = proc.mp_parent;
++            which++;
++
++            if (proc.mp_pid == pid) {
++                found = 1;
++                index = i;
++            }
++        }
++    }
++
++    if (found) {
++
++        quicksort(processes, NR_PROCS);
++
++        int child[NR_PROCS][NR_PROCS]; //only indexes
++        int childCount[NR_PROCS];
++
++        for (int i = 0; i < NR_PROCS; i++) {
++            childCount[i] = 0;
++        }
++
++        for (int i = 0; i < NR_PROCS; i++) {
++            struct process proc = processes[i];
++            if (proc.pid != 0 && proc.parent != proc.index) {
++                child[proc.parent][childCount[proc.parent]] = proc.index;
++                childCount[proc.parent] = childCount[proc.parent] + 1;
++            }
++        }
++
++        printPid(pid, index, 0, child, childCount);
++    }
++
++
++    return 0;
++}
++
+diff -rupN usrOld1/usr/src/minix/servers/pm/table.c usrDone1/usr/src/minix/servers/pm/table.c
+--- usrOld1/usr/src/minix/servers/pm/table.c	2018-05-02 21:56:01.243815287 +0200
++++ usrDone1/usr/src/minix/servers/pm/table.c	2018-05-02 21:59:32.946693294 +0200
+@@ -58,5 +58,7 @@ int (* const call_vec[NR_PM_CALLS])(void
+ 	CALL(PM_EXEC_RESTART)	= do_execrestart,
+ 	CALL(PM_GETEPINFO)	= do_getepinfo,		/* getepinfo(2) */
+ 	CALL(PM_GETPROCNR)	= do_getprocnr,		/* getprocnr(2) */
+-	CALL(PM_GETSYSINFO)	= do_getsysinfo		/* getsysinfo(2) */
++	CALL(PM_GETSYSINFO)	= do_getsysinfo,	/* getsysinfo(2) */
++	CALL(PM_PSTREE)		= do_pstree		/* pstree(2) */
++
+ };

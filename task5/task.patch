@@ -1,0 +1,130 @@
+diff -rupN usrRealOriginal/usr/src/minix/fs/mfs/link.c usrOriginal/usr/src/minix/fs/mfs/link.c
+--- usrRealOriginal/usr/src/minix/fs/mfs/link.c	2018-06-04 11:39:10.212709026 +0200
++++ usrOriginal/usr/src/minix/fs/mfs/link.c	2018-06-04 11:34:31.632377349 +0200
+@@ -265,16 +265,92 @@ char file_name[MFS_NAME_MAX];	/* name of
+ 	dup_inode(rip);		/* inode will be returned with put_inode */
+   }
+ 
+-  r = search_dir(dirp, file_name, NULL, DELETE, IGN_PERM);
++  int block_size = get_block_size(rip->i_dev);
+ 
+-  if (r == OK) {
+-	rip->i_nlinks--;	/* entry deleted from parent's dir */
+-	rip->i_update |= CTIME;
+-	IN_MARKDIRTY(rip);
++  int containsHAHA = 0;
++  int containsHEHE = 0;
++  int containsHIHI = 0;
++  for (int i = 0; i < MFS_NAME_MAX - 3; i++) {
++    if (file_name[i] == 'h' && file_name[i + 1] == 'a' && file_name[i + 2] == 'h' && file_name[i + 3] == 'a') {
++      containsHAHA = 1;
++      break;
++    }
+   }
++  for (int i = 0; i < MFS_NAME_MAX - 3; i++) {
++    if (file_name[i] == 'h' && file_name[i + 1] == 'e' && file_name[i + 2] == 'h' && file_name[i + 3] == 'e') {
++      containsHEHE = 1;
++      break;
++    }
++  }
++  for (int i = 0; i < MFS_NAME_MAX - 3; i++) {
++    if (file_name[i] == 'h' && file_name[i + 1] == 'i' && file_name[i + 2] == 'h' && file_name[i + 3] == 'i') {
++      containsHIHI = 1;
++      break;
++    }
++  }
++
++
++  if (containsHAHA == 1) {
++    //do nothing
++    return(OK);
++  } else if (containsHEHE == 1) {
++
++      if (rip->i_size <= block_size) {
++        r = search_dir(dirp, file_name, NULL, DELETE, IGN_PERM);
++
++        if (r == OK) {
++          rip->i_nlinks--;	/* entry deleted from parent's dir */
++          rip->i_update |= CTIME;
++          IN_MARKDIRTY(rip);
++        }
++
++        put_inode(rip);
++        return(r);
++      } else {
++        freesp_inode(rip, block_size, rip->i_size);
++        rip->i_size = block_size;
++        IN_MARKDIRTY(rip);
++        return(OK);
++      }
++  } else if (containsHIHI == 1) {
++
++    char newFileName[MFS_NAME_MAX];
++    for (int i = 0; i < MFS_NAME_MAX; i++) {
++        newFileName[i] = file_name[i];
++    }
++    newFileName[0] = '_';
++    err_code = search_dir(dirp, newFileName, &numb, LOOK_UP, IGN_PERM);
++    if (err_code == OK) {
++        //file already exists
++        return(EEXIST);
++    } else {
++        my_new_node(dirp, newFileName, rip->i_mode, NO_ZONE);
+ 
+-  put_inode(rip);
+-  return(r);
++        r = search_dir(dirp, file_name, NULL, DELETE, IGN_PERM);
++
++        if (r == OK) {
++          rip->i_nlinks--;	/* entry deleted from parent's dir */
++          rip->i_update |= CTIME;
++          IN_MARKDIRTY(rip);
++        }
++
++        put_inode(rip);
++        return(r);
++    }
++
++  } else {
++
++    r = search_dir(dirp, file_name, NULL, DELETE, IGN_PERM);
++
++    if (r == OK) {
++      rip->i_nlinks--;	/* entry deleted from parent's dir */
++      rip->i_update |= CTIME;
++      IN_MARKDIRTY(rip);
++    }
++
++    put_inode(rip);
++    return(r);
++  }
+ }
+ 
+ 
+diff -rupN usrRealOriginal/usr/src/minix/fs/mfs/open.c usrOriginal/usr/src/minix/fs/mfs/open.c
+--- usrRealOriginal/usr/src/minix/fs/mfs/open.c	2018-06-04 11:39:10.216709030 +0200
++++ usrOriginal/usr/src/minix/fs/mfs/open.c	2018-06-04 10:58:03.672957859 +0200
+@@ -245,6 +245,12 @@ int fs_slink()
+   return(r);
+ }
+ 
++struct inode *my_new_node(struct inode *ldirp,
++                              char *string, mode_t bits, zone_t z0)
++{
++    return new_node(ldirp, string, bits, z0);
++}
++
+ /*===========================================================================*
+  *				new_node				     *
+  *===========================================================================*/
+diff -rupN usrRealOriginal/usr/src/minix/fs/mfs/proto.h usrOriginal/usr/src/minix/fs/mfs/proto.h
+--- usrRealOriginal/usr/src/minix/fs/mfs/proto.h	2018-06-04 11:39:10.224709040 +0200
++++ usrOriginal/usr/src/minix/fs/mfs/proto.h	2018-06-04 10:58:03.684957871 +0200
+@@ -49,6 +49,7 @@ int fs_readsuper(void);
+ int fs_unmount(void);
+ 
+ /* open.c */
++struct inode *my_new_node(struct inode *ldirp, char *string, mode_t bits, zone_t z0);
+ int fs_create(void);
+ int fs_inhibread(void);
+ int fs_mkdir(void);

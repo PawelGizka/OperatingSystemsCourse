@@ -1,0 +1,576 @@
+diff -rupN usrClionOriginal/usr/include/minix/callnr.h usrClion/usr/include/minix/callnr.h
+--- usrClionOriginal/usr/include/minix/callnr.h	2018-05-01 15:39:12.739421000 +0200
++++ usrClion/usr/include/minix/callnr.h	2018-05-28 12:46:48.579090524 +0200
+@@ -58,8 +58,9 @@
+ #define PM_GETEPINFO		(PM_BASE + 45)
+ #define PM_GETPROCNR		(PM_BASE + 46)
+ #define PM_GETSYSINFO		(PM_BASE + 47)
++#define PM_SJF		        (PM_BASE + 48)
+ 
+-#define NR_PM_CALLS		48	/* highest number from base plus one */
++#define NR_PM_CALLS		49	/* highest number from base plus one */
+ 
+ /*===========================================================================*
+  *				Calls to VFS				     *
+diff -rupN usrClionOriginal/usr/include/minix/com.h usrClion/usr/include/minix/com.h
+--- usrClionOriginal/usr/include/minix/com.h	2018-05-01 15:39:12.751433000 +0200
++++ usrClion/usr/include/minix/com.h	2018-05-28 12:46:48.579090524 +0200
+@@ -763,6 +763,7 @@
+ #define SCHEDULING_STOP		(SCHEDULING_BASE+3)
+ #define SCHEDULING_SET_NICE	(SCHEDULING_BASE+4)
+ #define SCHEDULING_INHERIT	(SCHEDULING_BASE+5)
++#define SCHEDULING_SJF	    (SCHEDULING_BASE+6)
+ 
+ /*===========================================================================*
+  *              Messages for USB                                             *
+diff -rupN usrClionOriginal/usr/include/minix/config.h usrClion/usr/include/minix/config.h
+--- usrClionOriginal/usr/include/minix/config.h	2018-05-01 15:39:12.755437000 +0200
++++ usrClion/usr/include/minix/config.h	2018-05-28 16:57:16.989045466 +0200
+@@ -95,4 +95,8 @@
+ #define NR_PCIBUS 40
+ #define NR_PCIDEV 50
+ 
++/* SJF configuration parameters */
++#define SJF_Q 8
++#define MAX_SJFPRIO 100
++
+ #endif /* _CONFIG_H */
+diff -rupN usrClionOriginal/usr/include/unistd.h usrClion/usr/include/unistd.h
+--- usrClionOriginal/usr/include/unistd.h	2018-05-01 15:39:14.969437000 +0200
++++ usrClion/usr/include/unistd.h	2018-05-28 12:46:48.579090524 +0200
+@@ -411,5 +411,7 @@ extern	 int optreset;		/* getopt(3) exte
+ extern	 char *suboptarg;	/* getsubopt(3) external variable */
+ #endif
+ 
++int setsjf(int expected_time);
++
+ __END_DECLS
+ #endif /* !_UNISTD_H_ */
+diff -rupN usrClionOriginal/usr/src/include/unistd.h usrClion/usr/src/include/unistd.h
+--- usrClionOriginal/usr/src/include/unistd.h	2018-05-01 15:49:43.264614000 +0200
++++ usrClion/usr/src/include/unistd.h	2018-05-28 12:46:48.579090524 +0200
+@@ -411,5 +411,7 @@ extern	 int optreset;		/* getopt(3) exte
+ extern	 char *suboptarg;	/* getsubopt(3) external variable */
+ #endif
+ 
++int setsjf(int expected_time);
++
+ __END_DECLS
+ #endif /* !_UNISTD_H_ */
+diff -rupN usrClionOriginal/usr/src/lib/libc/misc/Makefile.inc usrClion/usr/src/lib/libc/misc/Makefile.inc
+--- usrClionOriginal/usr/src/lib/libc/misc/Makefile.inc	2018-05-01 15:49:55.947806000 +0200
++++ usrClion/usr/src/lib/libc/misc/Makefile.inc	2018-05-28 12:46:48.579090524 +0200
+@@ -4,7 +4,7 @@
+ .PATH: ${ARCHDIR}/misc ${.CURDIR}/misc
+ 
+ # constructor
+-SRCS+=	initfini.c
++SRCS+=	initfini.c setsjf.c
+ 
+ # for -fstack-protector
+ SRCS+=	stack_protector.c
+diff -rupN usrClionOriginal/usr/src/lib/libc/misc/setsjf.c usrClion/usr/src/lib/libc/misc/setsjf.c
+--- usrClionOriginal/usr/src/lib/libc/misc/setsjf.c	1970-01-01 01:00:00.000000000 +0100
++++ usrClion/usr/src/lib/libc/misc/setsjf.c	2018-05-28 12:46:48.579090524 +0200
+@@ -0,0 +1,15 @@
++#include <lib.h>
++#include <stdio.h>
++#include <stdlib.h>
++#include <sys/types.h>
++#include <unistd.h>
++#include <minix/rs.h>
++
++int setsjf(int expected_time) {
++    message m;
++    m.m1_i1 = expected_time;
++    m.m1_i2 = getpid();
++//    m.m1_i3 = getgid();
++
++    return _syscall(PM_PROC_NR, PM_SJF, &m);
++}
+\ No newline at end of file
+diff -rupN usrClionOriginal/usr/src/minix/include/minix/callnr.h usrClion/usr/src/minix/include/minix/callnr.h
+--- usrClionOriginal/usr/src/minix/include/minix/callnr.h	2018-05-01 15:50:56.306654000 +0200
++++ usrClion/usr/src/minix/include/minix/callnr.h	2018-05-28 12:46:48.579090524 +0200
+@@ -58,8 +58,9 @@
+ #define PM_GETEPINFO		(PM_BASE + 45)
+ #define PM_GETPROCNR		(PM_BASE + 46)
+ #define PM_GETSYSINFO		(PM_BASE + 47)
++#define PM_SJF		        (PM_BASE + 48)
+ 
+-#define NR_PM_CALLS		48	/* highest number from base plus one */
++#define NR_PM_CALLS		49	/* highest number from base plus one */
+ 
+ /*===========================================================================*
+  *				Calls to VFS				     *
+diff -rupN usrClionOriginal/usr/src/minix/include/minix/com.h usrClion/usr/src/minix/include/minix/com.h
+--- usrClionOriginal/usr/src/minix/include/minix/com.h	2018-05-01 15:50:56.322674000 +0200
++++ usrClion/usr/src/minix/include/minix/com.h	2018-05-28 12:46:48.579090524 +0200
+@@ -763,6 +763,7 @@
+ #define SCHEDULING_STOP		(SCHEDULING_BASE+3)
+ #define SCHEDULING_SET_NICE	(SCHEDULING_BASE+4)
+ #define SCHEDULING_INHERIT	(SCHEDULING_BASE+5)
++#define SCHEDULING_SJF	    (SCHEDULING_BASE+6)
+ 
+ /*===========================================================================*
+  *              Messages for USB                                             *
+diff -rupN usrClionOriginal/usr/src/minix/include/minix/config.h usrClion/usr/src/minix/include/minix/config.h
+--- usrClionOriginal/usr/src/minix/include/minix/config.h	2018-05-01 15:50:56.330685000 +0200
++++ usrClion/usr/src/minix/include/minix/config.h	2018-05-28 16:57:17.001070913 +0200
+@@ -95,4 +95,8 @@
+ #define NR_PCIBUS 40
+ #define NR_PCIDEV 50
+ 
++/* SJF configuration parameters */
++#define SJF_Q 8
++#define MAX_SJFPRIO 100
++
+ #endif /* _CONFIG_H */
+diff -rupN usrClionOriginal/usr/src/minix/include/minix/sched.h usrClion/usr/src/minix/include/minix/sched.h
+--- usrClionOriginal/usr/src/minix/include/minix/sched.h	2018-05-01 15:50:56.510915000 +0200
++++ usrClion/usr/src/minix/include/minix/sched.h	2018-05-28 12:46:48.579090524 +0200
+@@ -9,5 +9,6 @@ int sched_start(endpoint_t scheduler_e,
+ 	*newscheduler_e);
+ int sched_inherit(endpoint_t scheduler_e, endpoint_t schedulee_e,
+ 	endpoint_t parent_e, unsigned maxprio, endpoint_t *newscheduler_e);
++int sched_by_sjf(endpoint_t scheduler_e, endpoint_t schedulee_e, int sjfpriority);
+ 
+ #endif /* _MINIX_SCHED_H */
+diff -rupN usrClionOriginal/usr/src/minix/kernel/proc.c usrClion/usr/src/minix/kernel/proc.c
+--- usrClionOriginal/usr/src/minix/kernel/proc.c	2018-05-01 15:50:57.528165000 +0200
++++ usrClion/usr/src/minix/kernel/proc.c	2018-05-28 17:52:38.593612495 +0200
+@@ -1527,6 +1527,7 @@ void enqueue(
+   register struct proc *rp	/* this process is now runnable */
+ )
+ {
++	/* sjf_2018 */
+ /* Add 'rp' to one of the queues of runnable processes.  This function is 
+  * responsible for inserting a process into one of the scheduling queues. 
+  * The mechanism is implemented here.   The actual scheduling policy is
+@@ -1535,28 +1536,51 @@ void enqueue(
+  * This function can be used x-cpu as it always uses the queues of the cpu the
+  * process is assigned to.
+  */
+-  int q = rp->p_priority;	 		/* scheduling queue to use */
+-  struct proc **rdy_head, **rdy_tail;
+-  
+-  assert(proc_is_runnable(rp));
+-
+-  assert(q >= 0);
+-
+-  rdy_head = get_cpu_var(rp->p_cpu, run_q_head);
+-  rdy_tail = get_cpu_var(rp->p_cpu, run_q_tail);
+-
+-  /* Now add the process to the queue. */
+-  if (!rdy_head[q]) {		/* add to empty queue */
+-      rdy_head[q] = rdy_tail[q] = rp; 		/* create a new queue */
+-      rp->p_nextready = NULL;		/* mark new end */
+-  } 
+-  else {					/* add to tail of queue */
+-      rdy_tail[q]->p_nextready = rp;		/* chain tail of queue */	
+-      rdy_tail[q] = rp;				/* set new queue tail */
+-      rp->p_nextready = NULL;		/* mark new end */
+-  }
+ 
+-  if (cpuid == rp->p_cpu) {
++	int q = rp->p_priority;
++
++	struct proc **rdy_head, **rdy_tail;
++
++	assert(proc_is_runnable(rp));
++
++	assert(q >= 0);
++
++	rdy_head = get_cpu_var(rp->p_cpu, run_q_head);
++	rdy_tail = get_cpu_var(rp->p_cpu, run_q_tail);
++
++	/* Now add the process to the queue. */
++	if (!rdy_head[q]) {		/* add to empty queue */
++	  	rdy_head[q] = rdy_tail[q] = rp; 		/* create a new queue */
++	  	rp->p_nextready = NULL;		/* mark new end */
++	} else {
++		if (rp->sjf_expected_time >= 0 && rp->sjf_expected_time <= 100 && q == SJF_Q) {
++			//sjf process
++			printf("enque: schedule process by sjf\n");
++			register struct proc *current = rdy_head[q];
++			register struct proc *previous = rdy_head[q];
++
++			/* find first process with larger expected time */
++			while (current->sjf_expected_time < rp->sjf_expected_time && current->p_nextready != NULL) {
++				previous = current;
++				current = current->p_nextready;
++			}
++
++			if (current == rdy_head[q]) {//rp is at beginning of queue
++				rp->p_nextready = rdy_head[q];
++				rdy_head[q] = rp;
++			} else {
++				previous->p_nextready = rp;
++				rp->p_nextready = current;
++			}
++		} else {
++			/* add to tail of queue */
++			rdy_tail[q]->p_nextready = rp;		/* chain tail of queue */
++			rdy_tail[q] = rp;				/* set new queue tail */
++			rp->p_nextready = NULL;		/* mark new end */
++		}
++	}
++
++	if (cpuid == rp->p_cpu) {
+ 	  /*
+ 	   * enqueueing a process with a higher priority than the current one,
+ 	   * it gets preempted. The current process must be preemptible. Testing
+@@ -1568,7 +1592,7 @@ void enqueue(
+ 	  if((p->p_priority > rp->p_priority) &&
+ 			  (priv(p)->s_flags & PREEMPTIBLE))
+ 		  RTS_SET(p, RTS_PREEMPTED); /* calls dequeue() */
+-  }
++	}
+ #ifdef CONFIG_SMP
+   /*
+    * if the process was enqueued on a different cpu and the cpu is idle, i.e.
+diff -rupN usrClionOriginal/usr/src/minix/kernel/proc.h usrClion/usr/src/minix/kernel/proc.h
+--- usrClionOriginal/usr/src/minix/kernel/proc.h	2018-05-01 15:50:57.536174000 +0200
++++ usrClion/usr/src/minix/kernel/proc.h	2018-05-28 12:46:48.579090524 +0200
+@@ -27,6 +27,7 @@ struct proc {
+   volatile u32_t p_rts_flags;	/* process is runnable only if zero */
+   volatile u32_t p_misc_flags;	/* flags that do not suspend the process */
+ 
++  char sjf_expected_time;
+   char p_priority;		/* current process priority */
+   u64_t p_cpu_time_left;	/* time left to use the cpu */
+   unsigned p_quantum_size_ms;	/* assigned time quantum in ms
+diff -rupN usrClionOriginal/usr/src/minix/kernel/system.c usrClion/usr/src/minix/kernel/system.c
+--- usrClionOriginal/usr/src/minix/kernel/system.c	2018-05-01 15:50:57.580226000 +0200
++++ usrClion/usr/src/minix/kernel/system.c	2018-05-28 17:05:54.341883950 +0200
+@@ -623,8 +623,9 @@ int sched_proc(struct proc *p,
+ 			int quantum,
+ 			int cpu)
+ {
++    /* sjf_2018 */
+ 	/* Make sure the values given are within the allowed range.*/
+-	if ((priority < TASK_Q && priority != -1) || priority > NR_SCHED_QUEUES)
++	if ((priority < TASK_Q && priority != -1))
+ 		return(EINVAL);
+ 
+ 	if (quantum < 1 && quantum != -1)
+@@ -659,8 +660,15 @@ int sched_proc(struct proc *p,
+ 	if (proc_is_runnable(p))
+ 		RTS_SET(p, RTS_NO_QUANTUM);
+ 
+-	if (priority != -1)
+-		p->p_priority = priority;
++	if (priority != -1) {
++        if (priority >= NR_SCHED_QUEUES) {
++            p->p_priority = SJF_Q;
++            p->sjf_expected_time = priority - NR_SCHED_QUEUES;
++        } else {
++            p->p_priority = priority;
++            p->sjf_expected_time = -1;
++        }
++    }
+ 	if (quantum != -1) {
+ 		p->p_quantum_size_ms = quantum;
+ 		p->p_cpu_time_left = ms_2_cpu_time(quantum);
+diff -rupN usrClionOriginal/usr/src/minix/lib/libsys/sched_start.c usrClion/usr/src/minix/lib/libsys/sched_start.c
+--- usrClionOriginal/usr/src/minix/lib/libsys/sched_start.c	2018-05-01 15:51:04.975101000 +0200
++++ usrClion/usr/src/minix/lib/libsys/sched_start.c	2018-05-28 12:51:12.708677879 +0200
+@@ -100,3 +100,28 @@ int sched_start(endpoint_t scheduler_e,
+ 	*newscheduler_e = m.m_sched_lsys_scheduling_start.scheduler;
+ 	return (OK);
+ }
++
++
++int sched_by_sjf(endpoint_t scheduler_e, endpoint_t schedulee_e, int sjfpriority)
++{
++	/* sjf_2018 */
++	int rv;
++	message m;
++
++	assert(_ENDPOINT_P(scheduler_e) >= 0);
++	assert(_ENDPOINT_P(schedulee_e) >= 0);
++
++	memset(&m, 0, sizeof(m));
++	m.m_lsys_sched_scheduling_start.endpoint	= schedulee_e;
++	m.m_lsys_sched_scheduling_start.maxprio		= sjfpriority;
++
++	printf("shched_start.c: sched_by_sjf called \n");
++
++	/* Send the request to the scheduler */
++	if ((rv = _taskcall(scheduler_e, SCHEDULING_SJF, &m))) {
++		return rv;
++	}
++
++	return (OK);
++}
++
+diff -rupN usrClionOriginal/usr/src/minix/servers/pm/Makefile usrClion/usr/src/minix/servers/pm/Makefile
+--- usrClionOriginal/usr/src/minix/servers/pm/Makefile	2018-05-01 15:51:09.950501000 +0200
++++ usrClion/usr/src/minix/servers/pm/Makefile	2018-05-28 17:20:44.173239508 +0200
+@@ -4,7 +4,7 @@
+ PROG=	pm
+ SRCS=	main.c forkexit.c exec.c time.c alarm.c \
+ 	signal.c utility.c table.c trace.c getset.c misc.c \
+-	profile.c mcontext.c schedule.c
++	profile.c mcontext.c schedule.c sjf.c
+ 
+ DPADD+=	${LIBSYS} ${LIBTIMERS}
+ LDADD+=	-lsys -ltimers
+diff -rupN usrClionOriginal/usr/src/minix/servers/pm/proto.h usrClion/usr/src/minix/servers/pm/proto.h
+--- usrClionOriginal/usr/src/minix/servers/pm/proto.h	2018-05-01 15:51:10.006536000 +0200
++++ usrClion/usr/src/minix/servers/pm/proto.h	2018-05-28 12:46:48.579090524 +0200
+@@ -89,3 +89,5 @@ struct mproc *find_proc(pid_t lpid);
+ int nice_to_priority(int nice, unsigned *new_q);
+ int pm_isokendpt(int ep, int *proc);
+ void tell_vfs(struct mproc *rmp, message *m_ptr);
++
++int do_setsjf(void);
+diff -rupN usrClionOriginal/usr/src/minix/servers/pm/sjf.c usrClion/usr/src/minix/servers/pm/sjf.c
+--- usrClionOriginal/usr/src/minix/servers/pm/sjf.c	1970-01-01 01:00:00.000000000 +0100
++++ usrClion/usr/src/minix/servers/pm/sjf.c	2018-05-28 12:57:17.563870442 +0200
+@@ -0,0 +1,28 @@
++//
++// Created by osboxes on 5/27/18.
++//
++#include <sys/types.h>
++#include <stdio.h>
++#include "pm.h"
++#include "mproc.h"
++#include <minix/sched.h>
++
++int do_setsjf() {
++    /* sjf_2018 */
++    int sjf_priority = m_in.m1_i1;
++    pid_t pid = m_in.m1_i2;
++    printf("do_setsjf: sjf called %d %d \n", sjf_priority, pid);
++
++    for (int i = 0; i < NR_PROCS; i++) {
++        struct mproc proc = mproc[i];
++
++        if (proc.mp_pid == pid) {
++            return sched_by_sjf(proc.mp_scheduler, proc.mp_endpoint, sjf_priority);
++        }
++    }
++
++    printf("do_setsjf: Process not found in mproc table \n");
++
++    return -1;
++}
++
+diff -rupN usrClionOriginal/usr/src/minix/servers/pm/table.c usrClion/usr/src/minix/servers/pm/table.c
+--- usrClionOriginal/usr/src/minix/servers/pm/table.c	2018-05-01 15:51:10.018544000 +0200
++++ usrClion/usr/src/minix/servers/pm/table.c	2018-05-28 12:57:17.575879054 +0200
+@@ -12,6 +12,7 @@
+ #define CALL(n)	[((n) - PM_BASE)]
+ 
+ int (* const call_vec[NR_PM_CALLS])(void) = {
++	/* sjf_2018 */
+ 	CALL(PM_EXIT)		= do_exit,		/* _exit(2) */
+ 	CALL(PM_FORK)		= do_fork,		/* fork(2) */
+ 	CALL(PM_WAITPID)	= do_waitpid,		/* waitpid(2) */
+@@ -58,5 +59,6 @@ int (* const call_vec[NR_PM_CALLS])(void
+ 	CALL(PM_EXEC_RESTART)	= do_execrestart,
+ 	CALL(PM_GETEPINFO)	= do_getepinfo,		/* getepinfo(2) */
+ 	CALL(PM_GETPROCNR)	= do_getprocnr,		/* getprocnr(2) */
+-	CALL(PM_GETSYSINFO)	= do_getsysinfo		/* getsysinfo(2) */
++	CALL(PM_GETSYSINFO)	= do_getsysinfo,		/* getsysinfo(2) */
++	CALL(PM_SJF)		= do_setsjf		/* getsysinfo(2) */
+ };
+diff -rupN usrClionOriginal/usr/src/minix/servers/sched/main.c usrClion/usr/src/minix/servers/sched/main.c
+--- usrClionOriginal/usr/src/minix/servers/sched/main.c	2018-05-01 15:51:10.406785000 +0200
++++ usrClion/usr/src/minix/servers/sched/main.c	2018-05-28 12:57:17.539853218 +0200
+@@ -20,6 +20,7 @@ struct machine machine;		/* machine info
+  *===========================================================================*/
+ int main(void)
+ {
++	/* sjf_2018 */
+ 	/* Main routine of the scheduler. */
+ 	message m_in;	/* the incoming message itself is kept here. */
+ 	int call_nr;	/* system call number */
+@@ -70,6 +71,9 @@ int main(void)
+ 		case SCHEDULING_SET_NICE:
+ 			result = do_nice(&m_in);
+ 			break;
++        case SCHEDULING_SJF:
++            result = do_start_sjf_scheduling(&m_in);
++            break;
+ 		case SCHEDULING_NO_QUANTUM:
+ 			/* This message was sent from the kernel, don't reply */
+ 			if (IPC_STATUS_FLAGS_TEST(ipc_status,
+diff -rupN usrClionOriginal/usr/src/minix/servers/sched/proto.h usrClion/usr/src/minix/servers/sched/proto.h
+--- usrClionOriginal/usr/src/minix/servers/sched/proto.h	2018-05-01 15:51:10.406785000 +0200
++++ usrClion/usr/src/minix/servers/sched/proto.h	2018-05-28 16:46:00.162252464 +0200
+@@ -10,6 +10,7 @@ void setreply(int proc_nr, int result);
+ /* schedule.c */
+ int do_noquantum(message *m_ptr);
+ int do_start_scheduling(message *m_ptr);
++int do_start_sjf_scheduling(message *m_ptr);
+ int do_stop_scheduling(message *m_ptr);
+ int do_nice(message *m_ptr);
+ void init_scheduling(void);
+diff -rupN usrClionOriginal/usr/src/minix/servers/sched/schedproc.h usrClion/usr/src/minix/servers/sched/schedproc.h
+--- usrClionOriginal/usr/src/minix/servers/sched/schedproc.h	2018-05-01 15:51:10.418792000 +0200
++++ usrClion/usr/src/minix/servers/sched/schedproc.h	2018-05-28 12:46:48.579090524 +0200
+@@ -24,10 +24,11 @@ EXTERN struct schedproc {
+ 	endpoint_t endpoint;	/* process endpoint id */
+ 	endpoint_t parent;	/* parent endpoint id */
+ 	unsigned flags;		/* flag bits */
++    unsigned previous_priority;
+ 
+ 	/* User space scheduling */
+ 	unsigned max_priority;	/* this process' highest allowed priority */
+-	unsigned priority;		/* the process' current priority */
++	unsigned priority;		/* the process' current priority or sjf priority if greater then NR_SCHED_QUEUES */
+ 	unsigned time_slice;		/* this process's time slice */
+ 	unsigned cpu;		/* what CPU is the process running on */
+ 	bitchunk_t cpu_mask[BITMAP_CHUNKS(CONFIG_MAX_CPUS)]; /* what CPUs is the
+diff -rupN usrClionOriginal/usr/src/minix/servers/sched/schedule.c usrClion/usr/src/minix/servers/sched/schedule.c
+--- usrClionOriginal/usr/src/minix/servers/sched/schedule.c	2018-05-01 15:51:10.422794000 +0200
++++ usrClion/usr/src/minix/servers/sched/schedule.c	2018-05-28 18:16:08.159640576 +0200
+@@ -10,9 +10,11 @@
+ #include "sched.h"
+ #include "schedproc.h"
+ #include <assert.h>
++#include <minix/config.h>
+ #include <minix/com.h>
+ #include <machine/archtypes.h>
+ #include "kernel/proc.h" /* for queue constants */
++#include <errno.h>
+ 
+ static minix_timer_t sched_timer;
+ static unsigned balance_timeout;
+@@ -88,6 +90,7 @@ static void pick_cpu(struct schedproc *
+  *===========================================================================*/
+ 
+ int do_noquantum(message *m_ptr)
++/* sjf_2018 */
+ {
+ 	register struct schedproc *rmp;
+ 	int rv, proc_nr_n;
+@@ -99,10 +102,16 @@ int do_noquantum(message *m_ptr)
+ 	}
+ 
+ 	rmp = &schedproc[proc_nr_n];
+-	if (rmp->priority < MIN_USER_Q) {
+-		rmp->priority += 1; /* lower priority */
++	if (rmp->priority <= MIN_USER_Q) {
++		if (rmp->priority < MIN_USER_Q) {
++			rmp->priority += 1; /* lower priority */
++		}
++		if (rmp->priority == SJF_Q) {
++			rmp->priority = SJF_Q + 1;
++		}
+ 	}
+ 
++
+ 	if ((rv = schedule_process_local(rmp)) != OK) {
+ 		return rv;
+ 	}
+@@ -137,11 +146,57 @@ int do_stop_scheduling(message *m_ptr)
+ 	return OK;
+ }
+ 
++int do_start_sjf_scheduling(message *m_ptr) {
++	/* sjf_2018 */
++	register struct schedproc *rmp;
++
++	int expected_sjf_time = m_ptr->m_lsys_sched_scheduling_start.maxprio;
++
++	if (expected_sjf_time > MAX_SJFPRIO || expected_sjf_time < 0) {
++		printf("do_start_sjf_scheduling: invalid priority %d\n", expected_sjf_time);
++		errno = EINVAL;
++		return -1;
++	}
++
++	for (int i = 0; i < NR_PROCS; i++) {
++		rmp = &schedproc[i];
++
++		if (rmp->endpoint == m_ptr->m_lsys_sched_scheduling_start.endpoint) {
++			if (rmp->priority > MIN_USER_Q) {
++				if (expected_sjf_time == 0) {
++					rmp->priority = rmp->previous_priority;
++					schedule_process_local(rmp);
++					return 1;
++				} else {
++					printf("do_start_sjf_scheduling: process is already scheduled \n");
++					errno = EPERM;
++					return -1;
++				}
++			} else {
++				if (expected_sjf_time == 0) {
++					return 0;
++				}  else {
++					rmp->previous_priority = rmp->priority;
++					rmp->priority = NR_SCHED_QUEUES + expected_sjf_time;
++					schedule_process_local(rmp);
++					return 0;
++				}
++			}
++
++		}
++
++	}
++
++	printf("do_start_sjf_scheduling: no process with given endpoint %d\n", m_ptr->m_lsys_sched_scheduling_start.endpoint);
++	return -1;
++}
++
+ /*===========================================================================*
+  *				do_start_scheduling			     *
+  *===========================================================================*/
+ int do_start_scheduling(message *m_ptr)
+ {
++	/* sjf_2018 */
+ 	register struct schedproc *rmp;
+ 	int rv, proc_nr_n, parent_nr_n;
+ 	
+@@ -216,6 +271,10 @@ int do_start_scheduling(message *m_ptr)
+ 		assert(0);
+ 	}
+ 
++	if (rmp->priority == SJF_Q) {
++		rmp->priority = SJF_Q - 1;
++	}
++
+ 	/* Take over scheduling the process. The kernel reply message populates
+ 	 * the processes current priority and its time slice */
+ 	if ((rv = sys_schedctl(0, rmp->endpoint, 0, 0, 0)) != OK) {
+@@ -256,6 +315,7 @@ int do_start_scheduling(message *m_ptr)
+  *===========================================================================*/
+ int do_nice(message *m_ptr)
+ {
++	/* sjf_2018 */
+ 	struct schedproc *rmp;
+ 	int rv;
+ 	int proc_nr_n;
+@@ -277,6 +337,10 @@ int do_nice(message *m_ptr)
+ 		return EINVAL;
+ 	}
+ 
++	if (new_q == SJF_Q) {
++		new_q = SJF_Q - 1;
++	}
++
+ 	/* Store old values, in case we need to roll back the changes */
+ 	old_q     = rmp->priority;
+ 	old_max_q = rmp->max_priority;
+@@ -351,6 +415,7 @@ void init_scheduling(void)
+  */
+ static void balance_queues(minix_timer_t *tp)
+ {
++	/* sjf_2018 */
+ 	struct schedproc *rmp;
+ 	int proc_nr;
+ 
+@@ -358,6 +423,11 @@ static void balance_queues(minix_timer_t
+ 		if (rmp->flags & IN_USE) {
+ 			if (rmp->priority > rmp->max_priority) {
+ 				rmp->priority -= 1; /* increase priority */
++
++				if (rmp->priority == SJF_Q) {
++					rmp->priority = SJF_Q - 1;
++				}
++
+ 				schedule_process_local(rmp);
+ 			}
+ 		}
